@@ -1,0 +1,49 @@
+# 工作流的名称
+name: Android CI Build
+
+# 触发工作流的事件
+on:
+  push:
+    branches: [ "main" ] # 当有代码推送到 main 分支时触发
+  pull_request:
+    branches: [ "main" ] # 当有 pull request 合并到 main 分支时触发
+
+# 定义工作任务
+jobs:
+  build:
+    # 指定运行环境
+    runs-on: ubuntu-latest
+
+    # 定义步骤
+    steps:
+      # 1. 检出代码：将仓库的代码下载到虚拟机中
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 设置 Java 环境：安卓编译需要 JDK
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17' # 根据你的项目需求可更改为 '11' 或其他版本
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # 3. (可选但推荐) 设置 Gradle 缓存，加快后续编译速度
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # 4. 授予 gradlew 执行权限：这是在 Linux/Mac 虚拟机上运行所必需的
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 5. 编译项目：这里我们编译 debug 版本的 APK
+      # 对于 release 版本，你需要处理签名密钥，会更复杂一些
+      - name: Build with Gradle
+        run: ./gradlew assembleDebug
+
+      # 6. 上传编译产物 (APK)：将生成的 APK 文件作为 "artifact" 保存起来
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug.apk # 你可以自定义产物的名称
+          path: app/build/outputs/apk/debug/app-debug.apk # APK 生成的默认路径
