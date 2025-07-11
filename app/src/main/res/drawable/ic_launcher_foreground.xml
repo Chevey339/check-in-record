@@ -8,30 +8,41 @@
 
     <group
         android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.9"
-        android:scaleY="0.9">
-        <path android:pathData="M38,54 L52,68 L78,42">
+        android:pivotY="54">
+
+        <path
+            android:pathData="M 90,54 A 36,36 0 1 1 18,54 A 36,36 0 1 1 90,54 Z"
+            android:strokeWidth="4"
+            android:strokeColor="#206462F8" />
+
+        <path
+            android:pathData="M 78,54 A 24,24 0 1 1 30,54 A 24,24 0 1 1 78,54 Z"
+            android:strokeWidth="5">
             <aapt:attr name="android:strokeColor">
                 <gradient
+                    android:type="sweep"
+                    android:centerX="54"
+                    android:centerY="54">
+                    <item android:color="#00FFFFFF" android:offset="0.0" />
+                    <item android:color="#998E8DFF" android:offset="0.75" />
+                    <item android:color="#998E8DFF" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <path android:pathData="M54,54m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0">
+            <aapt:attr name="android:fillColor">
+                <gradient
                     android:type="linear"
-                    android:startX="38"
-                    android:startY="55"
-                    android:endX="78"
-                    android:endY="55">
+                    android:startX="42"
+                    android:startY="42"
+                    android:endX="66"
+                    android:endY="66">
                     <item android:color="#FF8E8DFF" android:offset="0.0" />
                     <item android:color="#FF6462F8" android:offset="1.0" />
                 </gradient>
             </aapt:attr>
-            <aapt:attr name="android:strokeWidth">
-                <item>10</item>
-            </aapt:attr>
-            <aapt:attr name="android:strokeLineCap">
-                <item>round</item>
-            </aapt:attr>
-            <aapt:attr name="android:strokeLineJoin">
-                <item>round</item>
-            </aapt:attr>
         </path>
+
     </group>
 </vector>

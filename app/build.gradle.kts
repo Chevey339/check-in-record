@@ -18,6 +18,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // 检查环境变量中是否存在签名信息
+            val storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+            if (storePassword != null) {
+                this.storeFile = file("../release.jks") // 指向工作流中创建的文件
+                this.storePassword = storePassword
+                this.keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                this.keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -25,6 +38,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
