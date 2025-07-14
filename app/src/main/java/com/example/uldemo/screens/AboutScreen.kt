@@ -1,5 +1,6 @@
 package com.example.uldemo.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,10 @@ import com.example.uldemo.ui.theme.CustomFontFamily
 @Composable
 fun AboutScreen(onNavigateBack: () -> Unit) {
     val uriHandler = LocalUriHandler.current
+    
+    BackHandler {
+        onNavigateBack()
+    }
     
     Box(
         modifier = Modifier

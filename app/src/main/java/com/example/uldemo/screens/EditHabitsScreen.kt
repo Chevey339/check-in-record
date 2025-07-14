@@ -1,6 +1,7 @@
 package com.example.uldemo.screens
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -33,6 +34,10 @@ fun EditHabitsScreen(onNavigateBack: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var editingHabit by remember { mutableStateOf<DailyHabit?>(null) }
     var showDeleteDialog by remember { mutableStateOf<DailyHabit?>(null) }
+    
+    BackHandler {
+        onNavigateBack()
+    }
     
     Box(
         modifier = Modifier
