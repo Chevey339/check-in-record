@@ -14,9 +14,9 @@
 
 ## 截图
 
-![Screenshot_1](.\screenshots\Screenshot_1.png)
+![Screenshot_1](screenshots/Screenshot_1.png)
 
-![Screenshot_2](.\screenshots\Screenshot_2.png)
+![Screenshot_2](screenshots/Screenshot_2.png)
 
 ## 系统要求
 
