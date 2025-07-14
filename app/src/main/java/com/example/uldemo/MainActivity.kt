@@ -58,12 +58,37 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.mutableStateListOf
 import com.example.uldemo.ui.theme.CustomFontFamily
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.json.JSONArray
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.FloatingActionButton
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalUriHandler
+
+// 导航状态枚举
+enum class Screen {
+    MAIN, EDIT_HABITS, ABOUT
+}
 
 data class DailyHabit(
     val id: Int,
@@ -71,6 +96,104 @@ data class DailyHabit(
     val description: String = "",
     val icon: String = "✓"
 )
+
+// 习惯管理器 - 管理习惯的增删改
+object HabitManager {
+    private val _habits = mutableStateListOf<DailyHabit>()
+    val habits: List<DailyHabit> get() = _habits.toList()
+    
+    private lateinit var sharedPreferences: SharedPreferences
+    private const val PREF_NAME = "habit_tracker_prefs"
+    private const val KEY_HABITS_DATA = "habits_data"
+    private var nextId = 1
+    
+    fun init(context: Context) {
+        sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        loadHabits()
+    }
+    
+    private fun loadHabits() {
+        try {
+            val jsonString = sharedPreferences.getString(KEY_HABITS_DATA, null)
+            if (jsonString != null) {
+                val jsonArray = JSONArray(jsonString)
+                _habits.clear()
+                for (i in 0 until jsonArray.length()) {
+                    val habitJson = jsonArray.getJSONObject(i)
+                    val habit = DailyHabit(
+                        id = habitJson.getInt("id"),
+                        title = habitJson.getString("title"),
+                        description = habitJson.optString("description", ""),
+                        icon = habitJson.optString("icon", "✓")
+                    )
+                    _habits.add(habit)
+                    nextId = maxOf(nextId, habit.id + 1)
+                }
+            } else {
+                // 默认习惯
+                _habits.addAll(getDefaultHabits())
+                saveHabits()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _habits.clear()
+            _habits.addAll(getDefaultHabits())
+        }
+    }
+    
+    private fun getDefaultHabits(): List<DailyHabit> {
+        return listOf(
+            DailyHabit(1, "喝水", "每天8杯水", "💧"),
+            DailyHabit(2, "运动", "30分钟运动", "🏃"),
+            DailyHabit(3, "冥想", "10分钟冥想", "🧘"),
+            DailyHabit(4, "阅读", "读书30分钟", "📖"),
+            DailyHabit(5, "早睡", "晚上11点前睡觉", "😴")
+        )
+    }
+    
+    private fun saveHabits() {
+        try {
+            val jsonArray = JSONArray()
+            _habits.forEach { habit ->
+                val habitJson = JSONObject().apply {
+                    put("id", habit.id)
+                    put("title", habit.title)
+                    put("description", habit.description)
+                    put("icon", habit.icon)
+                }
+                jsonArray.put(habitJson)
+            }
+            sharedPreferences.edit()
+                .putString(KEY_HABITS_DATA, jsonArray.toString())
+                .apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun addHabit(title: String, description: String, icon: String) {
+        val newHabit = DailyHabit(nextId++, title, description, icon)
+        _habits.add(newHabit)
+        saveHabits()
+    }
+    
+    fun updateHabit(id: Int, title: String, description: String, icon: String) {
+        val index = _habits.indexOfFirst { it.id == id }
+        if (index != -1) {
+            _habits[index] = _habits[index].copy(
+                title = title,
+                description = description,
+                icon = icon
+            )
+            saveHabits()
+        }
+    }
+    
+    fun deleteHabit(id: Int) {
+        _habits.removeAll { it.id == id }
+        saveHabits()
+    }
+}
 
 // 全局打卡状态管理
 object CheckInManager {
@@ -170,27 +293,19 @@ object CheckInManager {
     }
 }
 
-// 预定义的每日习惯
-val dailyHabits = listOf(
-    DailyHabit(1, "喝水", "每天8杯水", "💧"),
-//    DailyHabit(2, "运动", "30分钟运动", "🏃"),
-//    DailyHabit(3, "冥想", "10分钟冥想", "🧘"),
-//    DailyHabit(4, "阅读", "读书30分钟", "📖"),
-//    DailyHabit(5, "早睡", "晚上11点前睡觉", "😴")
-)
-
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 初始化打卡管理器
+        // 初始化管理器
         CheckInManager.init(this)
+        HabitManager.init(this)
         
         enableEdgeToEdge()
         setContent {
             UldemoTheme {
-                Greeting()
+                AppNavigation()
             }
         }
     }
@@ -198,8 +313,32 @@ class MainActivity : ComponentActivity() {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun Greeting() {
+fun AppNavigation() {
+    var currentScreen by remember { mutableStateOf(Screen.MAIN) }
+    
+    when (currentScreen) {
+        Screen.MAIN -> MainScreen(
+            onNavigateToEditHabits = { currentScreen = Screen.EDIT_HABITS },
+            onNavigateToAbout = { currentScreen = Screen.ABOUT }
+        )
+        Screen.EDIT_HABITS -> EditHabitsScreen(
+            onNavigateBack = { currentScreen = Screen.MAIN }
+        )
+        Screen.ABOUT -> AboutScreen(
+            onNavigateBack = { currentScreen = Screen.MAIN }
+        )
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun MainScreen(
+    onNavigateToEditHabits: () -> Unit,
+    onNavigateToAbout: () -> Unit
+) {
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var showMenu by remember { mutableStateOf(false) }
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -220,15 +359,52 @@ fun Greeting() {
         ) {
             Spacer(modifier = Modifier.statusBarsPadding())
             Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "打卡记录",
+            
+            // 顶部栏，包含标题和菜单按钮
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 34.sp,
-                    color = Color.Black
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "打卡记录",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 34.sp,
+                        color = Color.Black
+                    )
                 )
-            )
+                
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "菜单",
+                            tint = Color.Black
+                        )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("编辑习惯") },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToEditHabits()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("关于") },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToAbout()
+                            }
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
             Box(
@@ -237,12 +413,12 @@ fun Greeting() {
                     .shadow(
                         elevation = 16.dp,
                         shape = RoundedCornerShape(22.dp),
-                        ambientColor = Color.Black.copy(alpha = 0.08f), // 环境光阴影，更柔和
-                        spotColor = Color.Black.copy(alpha = 0.2f)       // 主光源阴影
+                        ambientColor = Color.Black.copy(alpha = 0.08f),
+                        spotColor = Color.Black.copy(alpha = 0.2f)
                     )
                     .clip(RoundedCornerShape(22.dp))
                     .background(Color.White)
-                    .padding(vertical = 16.dp, horizontal = 8.dp) // 内部留白
+                    .padding(vertical = 16.dp, horizontal = 8.dp)
             ) {
                 PhysicsBasedCalendar(
                     selectedDate = selectedDate,
@@ -252,11 +428,10 @@ fun Greeting() {
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // 将日程管理也视为一个独立的模块，遵循相同的设计语言
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // 占据剩余空间
+                    .weight(1f)
                     .shadow(
                         elevation = 16.dp,
                         shape = RoundedCornerShape(22.dp),
@@ -267,7 +442,6 @@ fun Greeting() {
                     .background(Color.White)
                     .padding(16.dp)
             ) {
-                // 模块标题
                 Text(
                     text = "每日打卡",
                     style = MaterialTheme.typography.titleLarge.copy(
@@ -277,10 +451,451 @@ fun Greeting() {
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                HabitManager(selectedDate = selectedDate)
+                HabitManagerComponent(selectedDate = selectedDate)
             }
 
-            // 为系统导航栏预留空间
+            Spacer(modifier = Modifier.navigationBarsPadding())
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun EditHabitsScreen(onNavigateBack: () -> Unit) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingHabit by remember { mutableStateOf<DailyHabit?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<DailyHabit?>(null) }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF9F9FB),
+                        Color.White
+                    )
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(modifier = Modifier.statusBarsPadding())
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            // 顶部栏
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "返回",
+                        tint = Color.Black
+                    )
+                }
+                
+                Text(
+                    text = "编辑习惯",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 28.sp,
+                        color = Color.Black
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 习惯列表
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.08f),
+                        spotColor = Color.Black.copy(alpha = 0.2f)
+                    )
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White)
+                    .padding(16.dp)
+            ) {
+                if (HabitManager.habits.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "暂无习惯，点击下方按钮添加",
+                            color = Color.Gray,
+                            fontFamily = CustomFontFamily
+                        )
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(HabitManager.habits) { habit ->
+                            EditableHabitItem(
+                                habit = habit,
+                                onEdit = { editingHabit = habit },
+                                onDelete = { showDeleteDialog = habit }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.navigationBarsPadding())
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+        
+        // 添加按钮
+        FloatingActionButton(
+            onClick = { showAddDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .navigationBarsPadding(),
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "添加习惯",
+                tint = Color.White
+            )
+        }
+    }
+    
+    // 添加/编辑对话框
+    if (showAddDialog || editingHabit != null) {
+        HabitEditDialog(
+            habit = editingHabit,
+            onDismiss = {
+                showAddDialog = false
+                editingHabit = null
+            },
+            onSave = { title, description, icon ->
+                if (editingHabit != null) {
+                    HabitManager.updateHabit(editingHabit!!.id, title, description, icon)
+                } else {
+                    HabitManager.addHabit(title, description, icon)
+                }
+                showAddDialog = false
+                editingHabit = null
+            }
+        )
+    }
+    
+    // 删除确认对话框
+    showDeleteDialog?.let { habit ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("删除习惯") },
+            text = { Text("确定要删除「${habit.title}」吗？此操作无法撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        HabitManager.deleteHabit(habit.id)
+                        showDeleteDialog = null
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun EditableHabitItem(
+    habit: DailyHabit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.04f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = habit.icon,
+            fontSize = 24.sp,
+            modifier = Modifier.padding(end = 12.dp)
+        )
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = habit.title,
+                color = Color.Black,
+                fontFamily = CustomFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp
+            )
+            Text(
+                text = habit.description,
+                color = Color.Gray,
+                fontFamily = CustomFontFamily,
+                fontSize = 12.sp
+            )
+        }
+        
+        IconButton(onClick = onEdit) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "编辑",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "删除",
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+fun HabitEditDialog(
+    habit: DailyHabit?,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit
+) {
+    var title by remember { mutableStateOf(habit?.title ?: "") }
+    var description by remember { mutableStateOf(habit?.description ?: "") }
+    var icon by remember { mutableStateOf(habit?.icon ?: "✓") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (habit == null) "添加习惯" else "编辑习惯") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("习惯名称") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("描述") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                OutlinedTextField(
+                    value = icon,
+                    onValueChange = { icon = it },
+                    label = { Text("图标 (emoji)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        onSave(title.trim(), description.trim(), icon.trim())
+                    }
+                },
+                enabled = title.isNotBlank()
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+fun AboutScreen(onNavigateBack: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF9F9FB),
+                        Color.White
+                    )
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(modifier = Modifier.statusBarsPadding())
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            // 顶部栏
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "返回",
+                        tint = Color.Black
+                    )
+                }
+                
+                Text(
+                    text = "关于",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 28.sp,
+                        color = Color.Black
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 关于内容
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.08f),
+                        spotColor = Color.Black.copy(alpha = 0.2f)
+                    )
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 应用图标
+                Text(
+                    text = "📊",
+                    fontSize = 64.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Text(
+                    text = "习惯打卡",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    ),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Text(
+                    text = "版本 1.0.0",
+                    color = Color.Gray,
+                    fontFamily = CustomFontFamily,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+                
+                // 应用介绍
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "📝 应用介绍",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black
+                        ),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    Text(
+                        text = "这是一个简洁优雅的习惯养成应用，帮助您建立和维持良好的日常习惯。通过日历视图和打卡功能，让习惯养成变得更加直观和有趣。",
+                        color = Color.Black.copy(alpha = 0.8f),
+                        fontFamily = CustomFontFamily,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+                    
+                    Text(
+                        text = "✨ 主要功能",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black
+                        ),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    val features = listOf(
+                        "📅 直观的日历视图",
+                        "✅ 简单的打卡操作",
+                        "📊 完成进度统计",
+                        "🎯 自定义习惯管理",
+                        "💾 本地数据存储"
+                    )
+                    
+                    features.forEach { feature ->
+                        Text(
+                            text = feature,
+                            color = Color.Black.copy(alpha = 0.8f),
+                            fontFamily = CustomFontFamily,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(1f))
+                
+                // GitHub链接
+                Button(
+                    onClick = {
+                        uriHandler.openUri("https://github.com/Chevey339/check-in-record")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_github),
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text("GitHub 开源地址")
+                }
+                
+                Text(
+                    text = "开发者：17",
+                    color = Color.Gray,
+                    fontFamily = CustomFontFamily,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+            
             Spacer(modifier = Modifier.navigationBarsPadding())
             Spacer(modifier = Modifier.height(10.dp))
         }
@@ -405,7 +1020,7 @@ fun DayCell(
 @SuppressLint("UnrememberedMutableState")
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun HabitManager(selectedDate: LocalDate) {
+fun HabitManagerComponent(selectedDate: LocalDate) {
     // 添加一个状态来触发重组
     var refreshTrigger by remember { mutableStateOf(0) }
     
@@ -423,7 +1038,7 @@ fun HabitManager(selectedDate: LocalDate) {
         )
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(dailyHabits) { habit ->
+            items(HabitManager.habits) { habit ->
                 HabitItem(
                     habit = habit,
                     date = selectedDate,
@@ -438,7 +1053,7 @@ fun HabitManager(selectedDate: LocalDate) {
         
         // 显示完成进度
         val completedCount = CheckInManager.getCompletedCount(selectedDate)
-        val totalCount = dailyHabits.size
+        val totalCount = HabitManager.habits.size
         
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -578,6 +1193,6 @@ fun MonthView(
 @Composable
 fun GreetingPreview() {
     UldemoTheme {
-        Greeting()
+        AppNavigation()
     }
 }
